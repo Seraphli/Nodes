@@ -223,11 +223,32 @@ def solve_turnstile(headless=False, timeout=90):
             # 逐层进 shadow DOM 点 checkbox
             ci = tab.ele("@name=cf-turnstile-response", timeout=2)
             if ci:
+                # Cloudflare moved the Turnstile shadow root out of the wrapper into a
+                # child div, so probe the wrapper's own shadow root, then every child
+                # div, then the page's light DOM. shadow_root takes no timeout arg and
+                # blocks for the tab's base timeout (10s) when absent, so shrink base
+                # during the probe to protect the 90s budget; restore before clicking.
+                iframe = None
+                old_base = tab.timeouts.base
                 try:
+                    tab.set.timeouts(base=0.5)
                     wrapper = ci.parent()
-                    iframe = wrapper.shadow_root.ele("tag:iframe", timeout=2)
+                    sr = wrapper.shadow_root
+                    if sr:
+                        iframe = sr.ele("tag:iframe", timeout=2)
+                    if not iframe:
+                        for div in wrapper.eles("tag:div", timeout=2):
+                            dsr = div.shadow_root
+                            if dsr:
+                                iframe = dsr.ele("tag:iframe", timeout=2)
+                                if iframe:
+                                    break
+                    if not iframe:
+                        iframe = tab.ele("tag:iframe@src^=https://challenges.cloudflare.com", timeout=2)
                 except Exception:
                     iframe = None
+                finally:
+                    tab.set.timeouts(base=old_base)
                 if iframe:
                     try:
                         iframe.run_js(_SCREEN_INJECT_JS)
@@ -244,7 +265,7 @@ def solve_turnstile(headless=False, timeout=90):
         raise TimeoutError("Turnstile 求解超时")
     finally:
         try:
-            browser.quit()
+            browser.quit(del_data=True)
         except Exception:
             pass
 

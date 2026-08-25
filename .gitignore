@@ -19,3 +19,6 @@ turnstilePatch/
 *.log
 screenshots/
 .DS_Store
+
+# CA workflow metadata (track_ca_files: none)
+.ca/
