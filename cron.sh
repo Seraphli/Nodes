@@ -8,6 +8,7 @@ RETENTION_DAYS=8
 COUNT=5
 THREADS=1
 MIN_ACCOUNTS=3                       # X < this on the "完成 X/N" line = failure
+MIN_PROXIES=300                      # batch proxy yield below this = failure (3 accounts x 100)
 HC_BODY_LIMIT=9000                   # cap ping body under healthchecks' 10000-byte PING_BODY_LIMIT
 LOG_FILE="$SCRIPT_DIR/cron.log"
 STATUS_FILE="$SCRIPT_DIR/LAST_RUN_STATUS"
@@ -38,7 +39,7 @@ fail() {
     exit 1
 }
 # Any unhandled command failure lands here instead of exiting silently.
-trap 'fail "aborted at line $LINENO"' ERR
+trap 'fail "aborted at line $LINENO: $BASH_COMMAND"' ERR
 # Remove per-run temp files on ANY exit; runs after fail()'s hc_ping has read RUN_LOG.
 trap 'rm -f "${RUN_LOG:-}" "${POOL_FILE:-}"' EXIT
 
@@ -84,7 +85,11 @@ log "Registration completed ${COMPLETED}/${COUNT} accounts"
 
 LATEST=$(ls -t "$NODE_DIR"/proxies_*.txt 2>/dev/null | head -1)
 [ -n "$LATEST" ] && [ -s "$LATEST" ] || fail "No proxy file found or empty, registration failed"
-log "Registered batch: $LATEST ($(wc -l < "$LATEST") proxies)"
+BATCH_COUNT=$(wc -l < "$LATEST")
+if [ "$BATCH_COUNT" -lt "$MIN_PROXIES" ]; then
+    fail "registration batch $LATEST yielded only $BATCH_COUNT proxies (need >= $MIN_PROXIES)"
+fi
+log "Registered batch: $LATEST ($BATCH_COUNT proxies)"
 
 # ---------------------------------------------------------------------------
 # Build the pool from registration output within the retention window.
