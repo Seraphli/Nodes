@@ -181,6 +181,15 @@ log "Resin: cleanup removed $CLEANED circuit-open nodes (subscription $TXT_SUB)"
 NODE_TOTAL=$(curl -s -m 15 -H "Authorization: Bearer $RESIN_ADMIN_TOKEN" \
     "$RESIN_API/nodes?limit=1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("total",0))' 2>/dev/null || echo 0)
 
+# del_data=True only deletes the host-side /tmp profile; snap Chromium resolves the same
+# path inside its private mount namespace and writes the real profile bytes there, where
+# nothing else cleans them. -mmin +60 spares any DrissionPage run still in progress.
+SNAP_DP_DIR=/tmp/snap-private-tmp/snap.chromium/tmp/DrissionPage/autoPortData
+if sudo test -d "$SNAP_DP_DIR"; then
+    sudo find "$SNAP_DP_DIR" -mindepth 1 -maxdepth 1 -type d -mmin +60 -exec rm -rf {} +
+    log "Snap-side DrissionPage profiles older than 60min cleaned"
+fi
+
 echo "OK $(date '+%Y-%m-%d %H:%M:%S') :: pool=$POOL_COUNT nodes=$NODE_TOTAL feed=$PROXY_COUNT" > "$STATUS_FILE"
 log "=== Done ==="
 hc_ping "" "OK :: pool=$POOL_COUNT nodes=$NODE_TOTAL feed=$PROXY_COUNT"
